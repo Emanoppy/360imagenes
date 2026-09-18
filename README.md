@@ -45,6 +45,45 @@ herramienta escribe esos metadatos:
 3. El resultado es un `.jpg` identico a simple vista, pero que Facebook,
    Instagram y Google Photos reconocen como panoramica.
 
+## Componer una tira 360 (antes / despues / oferta)
+
+En vez de forzar una sola foto suelta a 2:1 (que sale deformada tipo
+"planeta"), se pueden pegar 2 a 4 imagenes que ya uses como creativos
+(gancho, antes, despues, oferta) en una sola tira ancha. El visor 360
+arranca mostrando un panel, y el usuario tiene que girar (dedo o
+giroscopio) para descubrir el resto — la interaccion se vuelve parte de
+la mecanica del anuncio en vez de un efecto vacio.
+
+```bash
+python compose_360.py antes.jpg despues.jpg oferta.jpg -o tira.jpg --etiquetas "ANTES,DESPUES,-30% HOY"
+python inject_360.py tira.jpg tira_360.jpg --fov 90
+```
+
+`compose_360.py` ajusta automaticamente el resultado a 2:1 (calcula el
+ancho de cada panel segun cuantas imagenes le des), recorta y escala cada
+imagen sin deformarla, agrega la etiqueta de texto si se la pasas, y
+difumina cada union para que no se note como un corte recto.
+
+## Inspeccionar y limpiar metadatos (imagenes de IA)
+
+Si la foto de origen se genero con IA (Midjourney, Stable Diffusion,
+ComfyUI, etc.), puede traer metadatos que delatan el origen (el prompt, el
+nombre de la herramienta, marcas de "Content Credentials"/C2PA).
+`metadata_tools.py` sirve para verlos y para limpiarlos:
+
+```bash
+# ver que metadatos tiene una imagen ahora mismo
+python metadata_tools.py inspeccionar entrada.jpg
+
+# generar una copia sin ningun metadato (EXIF, XMP, ICC, chunks de texto)
+python metadata_tools.py limpiar entrada.jpg limpia.jpg
+```
+
+`inject_360.py` ya limpia esto automaticamente antes de escribir sus
+propios metadatos (reconstruye la imagen solo a partir de los pixeles), asi
+que no hace falta correr `limpiar` como paso manual antes de inyectar —
+el inspector queda para cuando quieras auditar una imagen puntual.
+
 ## Como publicarla en Facebook (imprescindible)
 
 **No subas el archivo directo en el selector de imagenes del Ads Manager.**
@@ -90,6 +129,8 @@ alla de que tecnicamente el truco funcione. Usalo bajo tu propio criterio.
 ```
 360imagenes/
 ├── inject_360.py       # motor: EXIF + XMP GPano, uso por linea de comandos
+├── compose_360.py      # arma la tira 2:1 a partir de 2-4 imagenes (antes/despues/oferta)
+├── metadata_tools.py   # inspeccionar / limpiar metadatos (util con imagenes de IA)
 ├── app.py              # servidor web local (Flask)
 ├── templates/
 │   └── index.html      # pagina con zona de arrastrar y soltar

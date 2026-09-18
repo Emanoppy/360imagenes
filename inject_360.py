@@ -104,6 +104,13 @@ def procesar_imagen_360(
         img = img.convert("RGB")
     width, height = img.size
 
+    # Se reconstruye la imagen solo a partir de los pixeles (sin su EXIF/XMP/
+    # ICC/chunks originales) antes de inyectar los datos 360. Esto es
+    # deliberado: si la foto viene de una IA (Midjourney, Stable Diffusion,
+    # etc.) o de otra camara, sus metadatos previos no deben mezclarse con
+    # los que estamos por escribir.
+    img = Image.frombytes(img.mode, img.size, img.tobytes())
+
     ratio = width / height
     if abs(ratio - 2.0) > 0.05:
         print(
