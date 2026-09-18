@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inyector 360 - RICOH THETA</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115; color: #eee;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 16px; margin: 0; min-height: 100vh;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.sub { color: #9aa0a6; margin-top: 0; text-align: center; max-width: 520px; }
+  #dropzone {
+    width: 100%; max-width: 520px; min-height: 220px;
+    border: 2px dashed #4b5563; border-radius: 16px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .15s ease; padding: 24px; text-align: center;
+    background: #171a21;
+  }
+  #dropzone.drag { border-color: #5b8dee; background: #1b2130; }
+  #dropzone input { display: none; }
+  #lista { width: 100%; max-width: 520px; margin-top: 16px; }
+  .item { display: flex; justify-content: space-between; padding: 6px 10px; background: #171a21; border-radius: 8px; margin-bottom: 6px; font-size: .9rem; }
+  .item.ok { border-left: 3px solid #4caf50; }
+  .item.fail { border-left: 3px solid #e05252; }
+  .row { width: 100%; max-width: 520px; display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+  label.fov { font-size: .85rem; color: #9aa0a6; }
+  input[type=number] { width: 70px; background: #171a21; border: 1px solid #333; color: #eee; padding: 6px; border-radius: 6px; }
+  button {
+    margin-top: 16px; padding: 10px 22px; border: none; border-radius: 10px;
+    background: #5b8dee; color: white; font-size: 1rem; cursor: pointer;
+  }
+  button:disabled { background: #3a3f4b; cursor: not-allowed; }
+  #estado { margin-top: 12px; font-size: .9rem; color: #9aa0a6; min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <h1>Inyector 360 (RICOH THETA S)</h1>
+  <p class="sub">Arrastra tus fotos .jpg. Se les agrega el EXIF + XMP GPano equirectangular
+     para que Facebook / Instagram las abran con el visor de esfera y giroscopio.</p>
+
+  <div id="dropzone">
+    <span>Arrastra tus fotos aqui, o hace click para elegirlas</span>
+    <input type="file" id="fileInput" accept=".jpg,.jpeg" multiple>
+  </div>
+
+  <div class="row">
+    <label class="fov">Campo de vision inicial (grados):</label>
+    <input type="number" id="fov" value="75" min="30" max="120">
+  </div>
+
+  <div id="lista"></div>
+  <button id="btnProcesar" disabled>Procesar y descargar .zip</button>
+  <div id="estado"></div>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const lista = document.getElementById('lista');
+  const btn = document.getElementById('btnProcesar');
+  const estado = document.getElementById('estado');
+  let archivos = [];
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach(ev =>
+    dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); })
+  );
+  ['dragleave', 'drop'].forEach(ev =>
+    dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); })
+  );
+  dropzone.addEventListener('drop', e => agregarArchivos(e.dataTransfer.files));
+  fileInput.addEventListener('change', e => agregarArchivos(e.target.files));
+
+  function agregarArchivos(fileList) {
+    for (const f of fileList) {
+      if (/\.(jpe?g)$/i.test(f.name)) archivos.push(f);
+    }
+    renderLista();
+  }
+
+  function renderLista() {
+    lista.innerHTML = '';
+    archivos.forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.textContent = f.name;
+      lista.appendChild(div);
+    });
+    btn.disabled = archivos.length === 0;
+  }
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    estado.textContent = 'Procesando ' + archivos.length + ' foto(s)...';
+
+    const form = new FormData();
+    archivos.forEach(f => form.append('fotos', f));
+    form.append('fov', document.getElementById('fov').value);
+
+    try {
+      const resp = await fetch('/procesar', { method: 'POST', body: form });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        estado.textContent = 'Error: ' + (err.error || resp.statusText);
+        btn.disabled = false;
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fotos_360.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+      estado.textContent = 'Listo. Se descargo fotos_360.zip';
+      archivos = [];
+      renderLista();
+    } catch (e) {
+      estado.textContent = 'Error de conexion: ' + e.message;
+    }
+    btn.disabled = archivos.length === 0;
+  });
+</script>
+</body>
+</html>
