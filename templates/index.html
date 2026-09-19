@@ -41,6 +41,11 @@
     background: #2a3040; color: #cdd6e6; flex-shrink: 0;
   }
   .item button.ver360.activo { background: #5b8dee; color: white; }
+  .item button.eliminar {
+    margin: 0; padding: 4px 9px; font-size: .8rem; border-radius: 6px;
+    background: #3a2020; color: #e79a9a; flex-shrink: 0;
+  }
+  .item button.eliminar:hover { background: #5a2a2a; }
   .row { width: 100%; max-width: 520px; display: flex; gap: 10px; align-items: center; margin-top: 16px; }
   label.fov { font-size: .85rem; color: #9aa0a6; }
   input[type=number] { width: 70px; background: #171a21; border: 1px solid #333; color: #eee; padding: 6px; border-radius: 6px; }
@@ -171,9 +176,27 @@
       });
       div.appendChild(verBtn);
 
+      const delBtn = document.createElement('button');
+      delBtn.className = 'eliminar';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Quitar de la lista';
+      delBtn.addEventListener('click', () => eliminarArchivo(i));
+      div.appendChild(delBtn);
+
       lista.appendChild(div);
     });
     btn.disabled = archivos.length === 0;
+  }
+
+  function eliminarArchivo(i) {
+    archivos.splice(i, 1);
+    if (previewIndex === i) {
+      previewIndex = null;
+      document.getElementById('previewBox').classList.remove('visible');
+    } else if (previewIndex !== null && previewIndex > i) {
+      previewIndex -= 1;
+    }
+    renderLista();
   }
 
   btn.addEventListener('click', async () => {
