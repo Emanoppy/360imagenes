@@ -60,6 +60,41 @@ def _dibujar_etiqueta(panel: Image.Image, texto: str) -> Image.Image:
     return panel
 
 
+def _dibujar_indicador_giro(panel: Image.Image, texto: str = "Desliza para ver mas →") -> Image.Image:
+    """Dibuja una pastilla semi-transparente con el aviso de que se puede
+    girar, quemada directamente sobre los pixeles (no es metadata)."""
+    panel = panel.copy()
+    draw = ImageDraw.Draw(panel, "RGBA")
+
+    try:
+        fuente = ImageFont.truetype("arialbd.ttf", size=max(18, panel.height // 24))
+    except OSError:
+        fuente = ImageFont.load_default()
+
+    padding_x, padding_y = 18, 10
+    bbox = draw.textbbox((0, 0), texto, font=fuente)
+    ancho_texto = bbox[2] - bbox[0]
+    alto_texto = bbox[3] - bbox[1]
+
+    ancho_pastilla = ancho_texto + padding_x * 2
+    alto_pastilla = alto_texto + padding_y * 2
+    x0 = (panel.width - ancho_pastilla) // 2
+    y0 = max(20, panel.height // 30)
+
+    draw.rounded_rectangle(
+        [(x0, y0), (x0 + ancho_pastilla, y0 + alto_pastilla)],
+        radius=alto_pastilla // 2,
+        fill=(0, 0, 0, 150),
+    )
+    draw.text(
+        (x0 + padding_x, y0 + padding_y - bbox[1]),
+        texto,
+        font=fuente,
+        fill=(255, 255, 255, 255),
+    )
+    return panel
+
+
 def _difuminar_costuras(canvas: Image.Image, num_paneles: int) -> Image.Image:
     """Aplica un degradado suave en cada union entre paneles para que no
     se vea como una linea recta y dura."""
@@ -90,6 +125,7 @@ def componer_360(
     salida: str,
     alto: int = 1024,
     etiquetas: list[str] | None = None,
+    indicador_giro: bool = True,
 ) -> str:
     n = len(rutas_imagenes)
     if not (2 <= n <= 4):
@@ -104,6 +140,8 @@ def componer_360(
         panel = _ajustar_panel(Image.open(ruta), ancho_panel, alto)
         if etiquetas and i < len(etiquetas) and etiquetas[i]:
             panel = _dibujar_etiqueta(panel, etiquetas[i])
+        if i == 0 and indicador_giro:
+            panel = _dibujar_indicador_giro(panel)
         canvas.paste(panel, (i * ancho_panel, 0))
 
     canvas = _difuminar_costuras(canvas, n)
@@ -122,11 +160,15 @@ def main():
     parser.add_argument("-o", "--salida", required=True, help="Archivo de salida (.jpg)")
     parser.add_argument("--alto", type=int, default=1024, help="Alto del resultado (el ancho sera el doble)")
     parser.add_argument("--etiquetas", default=None, help='Texto por panel separado por comas, ej: "ANTES,DESPUES,-30% HOY"')
+    parser.add_argument(
+        "--sin-indicador", dest="indicador_giro", action="store_false", default=True,
+        help='No dibujar el aviso "Desliza para ver mas" en el primer panel',
+    )
 
     args = parser.parse_args()
     etiquetas = args.etiquetas.split(",") if args.etiquetas else None
 
-    out = componer_360(args.imagenes, args.salida, alto=args.alto, etiquetas=etiquetas)
+    out = componer_360(args.imagenes, args.salida, alto=args.alto, etiquetas=etiquetas, indicador_giro=args.indicador_giro)
     print(f"Listo: {out} (ahora se le puede aplicar inject_360.py)")
 
 
