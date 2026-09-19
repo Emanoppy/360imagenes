@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inyector 360 - RICOH THETA</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.130.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.130.0/examples/jsm/"
+  }
+}
+</script>
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -24,9 +32,15 @@
   #dropzone.drag { border-color: #5b8dee; background: #1b2130; }
   #dropzone input { display: none; }
   #lista { width: 100%; max-width: 520px; margin-top: 16px; }
-  .item { display: flex; justify-content: space-between; padding: 6px 10px; background: #171a21; border-radius: 8px; margin-bottom: 6px; font-size: .9rem; }
+  .item { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #171a21; border-radius: 8px; margin-bottom: 6px; font-size: .9rem; gap: 8px; }
   .item.ok { border-left: 3px solid #4caf50; }
   .item.fail { border-left: 3px solid #e05252; }
+  .item span.nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .item button.ver360 {
+    margin: 0; padding: 4px 10px; font-size: .78rem; border-radius: 6px;
+    background: #2a3040; color: #cdd6e6; flex-shrink: 0;
+  }
+  .item button.ver360.activo { background: #5b8dee; color: white; }
   .row { width: 100%; max-width: 520px; display: flex; gap: 10px; align-items: center; margin-top: 16px; }
   label.fov { font-size: .85rem; color: #9aa0a6; }
   input[type=number] { width: 70px; background: #171a21; border: 1px solid #333; color: #eee; padding: 6px; border-radius: 6px; }
@@ -36,6 +50,29 @@
   }
   button:disabled { background: #3a3f4b; cursor: not-allowed; }
   #estado { margin-top: 12px; font-size: .9rem; color: #9aa0a6; min-height: 1.2em; }
+
+  #previewBox {
+    width: 100%; max-width: 520px; margin-top: 24px; display: none;
+  }
+  #previewBox.visible { display: block; }
+  #previewHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  #previewHeader h2 { font-size: 1rem; margin: 0; color: #cdd6e6; }
+  #previewCanvasWrap {
+    width: 100%; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden;
+    background: #05060a; position: relative; touch-action: none;
+    border: 1px solid #262b36;
+  }
+  #previewCanvasWrap canvas { display: block; width: 100%; height: 100%; }
+  #previewHint {
+    position: absolute; bottom: 8px; left: 0; right: 0; text-align: center;
+    font-size: .75rem; color: #ffffffaa; pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  }
+  #previewTools { display: flex; gap: 8px; margin-top: 10px; }
+  #previewTools button {
+    margin: 0; padding: 8px 14px; font-size: .82rem; background: #2a3040; color: #cdd6e6;
+  }
+  #previewTools button.on { background: #4caf50; color: white; }
 </style>
 </head>
 <body>
@@ -57,6 +94,19 @@
   <button id="btnProcesar" disabled>Procesar y descargar .zip</button>
   <div id="estado"></div>
 
+  <div id="previewBox">
+    <div id="previewHeader">
+      <h2 id="previewTitulo">Vista previa 360</h2>
+    </div>
+    <div id="previewCanvasWrap">
+      <span id="previewHint">Arrastra para girar</span>
+    </div>
+    <div id="previewTools">
+      <button id="btnGiroscopio">Activar giroscopio (celular)</button>
+      <button id="btnFullscreen">Pantalla completa</button>
+    </div>
+  </div>
+
 <script>
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
@@ -64,6 +114,7 @@
   const btn = document.getElementById('btnProcesar');
   const estado = document.getElementById('estado');
   let archivos = [];
+  let previewIndex = null;
 
   dropzone.addEventListener('click', () => fileInput.click());
 
@@ -81,14 +132,34 @@
       if (/\.(jpe?g)$/i.test(f.name)) archivos.push(f);
     }
     renderLista();
+    if (previewIndex === null && archivos.length > 0 && typeof mostrarVista360 === 'function') {
+      mostrarVista360(0);
+    }
   }
 
   function renderLista() {
     lista.innerHTML = '';
-    archivos.forEach(f => {
+    archivos.forEach((f, i) => {
       const div = document.createElement('div');
       div.className = 'item';
-      div.textContent = f.name;
+
+      const nombre = document.createElement('span');
+      nombre.className = 'nombre';
+      nombre.textContent = f.name;
+      div.appendChild(nombre);
+
+      const verBtn = document.createElement('button');
+      verBtn.className = 'ver360' + (i === previewIndex ? ' activo' : '');
+      verBtn.textContent = 'Ver 360';
+      verBtn.addEventListener('click', () => {
+        if (typeof mostrarVista360 === 'function') {
+          mostrarVista360(i);
+        } else {
+          estado.textContent = 'El visor 3D todavia esta cargando, espera un segundo...';
+        }
+      });
+      div.appendChild(verBtn);
+
       lista.appendChild(div);
     });
     btn.disabled = archivos.length === 0;
@@ -119,12 +190,132 @@
       URL.revokeObjectURL(url);
       estado.textContent = 'Listo. Se descargo fotos_360.zip';
       archivos = [];
+      previewIndex = null;
+      document.getElementById('previewBox').classList.remove('visible');
       renderLista();
     } catch (e) {
       estado.textContent = 'Error de conexion: ' + e.message;
     }
     btn.disabled = archivos.length === 0;
   });
+
+  // --- Vista previa 360 (Three.js) ---
+  // La textura se ve igual con o sin metadatos inyectados (el metadato no
+  // cambia los pixeles), asi que se puede previsualizar el archivo original
+  // tal cual se solto, sin esperar a procesarlo en el servidor.
+  import('three').then(THREE => {
+    import('three/addons/controls/OrbitControls.js').then(({ OrbitControls }) => {
+      import('three/addons/controls/DeviceOrientationControls.js').then(({ DeviceOrientationControls }) => {
+        iniciarVisor360(THREE, OrbitControls, DeviceOrientationControls);
+      });
+    });
+  });
+
+  function iniciarVisor360(THREE, OrbitControls, DeviceOrientationControls) {
+    const wrap = document.getElementById('previewCanvasWrap');
+    const previewBox = document.getElementById('previewBox');
+    const previewTitulo = document.getElementById('previewTitulo');
+    const btnGiroscopio = document.getElementById('btnGiroscopio');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, wrap.clientWidth / wrap.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    wrap.appendChild(renderer.domElement);
+
+    const geometry = new THREE.SphereGeometry(500, 60, 40);
+    geometry.scale(-1, 1, 1); // se ve desde adentro de la esfera, como el visor de Facebook
+
+    const material = new THREE.MeshBasicMaterial({ color: 0x111318 });
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+
+    camera.position.set(0, 0, 0.1);
+
+    const orbitControls = new OrbitControls(camera, renderer.domElement);
+    orbitControls.enablePan = false;
+    orbitControls.enableZoom = true;
+    orbitControls.rotateSpeed = -0.4; // invertido: se siente como "agarrar" la esfera y girarla
+    orbitControls.minDistance = 0.01;
+    orbitControls.maxDistance = 1;
+    orbitControls.target.set(0, 0, 0);
+
+    let deviceControls = null;
+    let usandoGiroscopio = false;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (usandoGiroscopio && deviceControls) {
+        deviceControls.update();
+      } else {
+        orbitControls.update();
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = wrap.clientWidth / wrap.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    });
+
+    const loader = new THREE.TextureLoader();
+
+    window.mostrarVista360 = function (i) {
+      previewIndex = i;
+      renderLista();
+      const archivo = archivos[i];
+      previewTitulo.textContent = 'Vista previa 360 — ' + archivo.name;
+      previewBox.classList.add('visible');
+
+      const url = URL.createObjectURL(archivo);
+      loader.load(url, (textura) => {
+        textura.encoding = THREE.sRGBEncoding;
+        material.map = textura;
+        material.color.set(0xffffff);
+        material.needsUpdate = true;
+        URL.revokeObjectURL(url);
+      });
+
+      previewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    btnGiroscopio.addEventListener('click', async () => {
+      if (usandoGiroscopio) {
+        usandoGiroscopio = false;
+        btnGiroscopio.classList.remove('on');
+        btnGiroscopio.textContent = 'Activar giroscopio (celular)';
+        return;
+      }
+
+      try {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const permiso = await DeviceOrientationEvent.requestPermission();
+          if (permiso !== 'granted') {
+            alert('Sin permiso de orientacion del dispositivo no se puede probar el giroscopio.');
+            return;
+          }
+        }
+        if (!deviceControls) {
+          deviceControls = new DeviceOrientationControls(camera);
+        }
+        deviceControls.connect();
+        usandoGiroscopio = true;
+        btnGiroscopio.classList.add('on');
+        btnGiroscopio.textContent = 'Giroscopio activo (tocar para volver al mouse)';
+      } catch (e) {
+        alert('Este dispositivo/navegador no soporta el sensor de orientacion: ' + e.message);
+      }
+    });
+
+    btnFullscreen.addEventListener('click', () => {
+      if (wrap.requestFullscreen) wrap.requestFullscreen();
+    });
+  }
 </script>
 </body>
 </html>
